@@ -1,4 +1,4 @@
-import sys, json, ctypes, subprocess, os, time, zipfile, hashlib, shutil, threading, traceback
+import sys, json, ctypes, os, time, zipfile, hashlib, shutil, threading, traceback
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QApplication, QWidget, QFileDialog, QVBoxLayout,
                                QPushButton, QScrollArea, QFormLayout, QFrame, 
                                QMessageBox, QGraphicsOpacityEffect, QPlainTextEdit)
 from PySide6.QtCore import QTimer, Qt, QPropertyAnimation, QRect, QObject, Signal
-from PySide6.QtGui import QImage, QPainter, QColor, QIcon, QPixmap, QPen, QFont
+from PySide6.QtGui import QImage, QPainter, QColor, QIcon, QPixmap, QPen, QFont, QTransform
 
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
@@ -106,6 +106,40 @@ def install_log_redirect():
         log("".join(traceback.format_exception(exc_type, exc, tb)), "ERR")
 
     sys.excepthook = _hook
+
+
+# ================= 图标 =================
+def resource_path(name):
+    """打包成 exe 后资源在 _MEIPASS 里；源码运行时在脚本同级目录。"""
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / name
+    return Path(__file__).resolve().parent / name
+
+
+ICON_PATH = resource_path("Fumofumo_icon.png")
+
+
+def load_app_icon():
+    """优先用 Fumofumo_icon.png；文件缺失时退回原来手绘的圆，保证托盘一定有图标。"""
+    try:
+        if ICON_PATH.exists():
+            pm = QPixmap(str(ICON_PATH))
+            if not pm.isNull():
+                return QIcon(pm)
+    except Exception:
+        pass
+    pm = QPixmap(128, 128)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(QColor(135, 206, 250))
+    pen.setWidth(12)
+    painter.setPen(pen)
+    painter.setBrush(QColor(255, 192, 203))
+    painter.drawEllipse(10, 10, 108, 108)
+    painter.end()
+    return QIcon(pm)
 
 
 # 支持的模型格式（.zip 用来直接吃 Sketchfab 的下载压缩包）
@@ -1412,17 +1446,7 @@ class Pet(QWidget):
 
     def setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
-        pixmap = QPixmap(128, 128)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        pen = QPen(QColor(135, 206, 250)); pen.setWidth(12)
-        painter.setPen(pen)
-        painter.setBrush(QColor(255, 192, 203))
-        painter.drawEllipse(10, 10, 108, 108)
-        painter.end()
-        
-        app_icon = QIcon(pixmap)
+        app_icon = load_app_icon()
         self.setWindowIcon(app_icon)
         self.tray_icon.setIcon(app_icon)
         self.tray_icon.setToolTip("WINobj 桌宠")
@@ -1659,7 +1683,8 @@ class Pet(QWidget):
         vao.render(vertices=len(verts))
 
         data_pixels = fbo.read(components=4, viewport=(vx, vy, vw, vh))
-        img = QImage(bytearray(data_pixels), vw, vh, vw * 4, QImage.Format_RGBA8888).mirrored(False, True).copy()
+        img = QImage(bytearray(data_pixels), vw, vh, vw * 4, QImage.Format_RGBA8888)
+        img = img.transformed(QTransform().scale(1, -1)).copy()  # 竖直翻转（GL 的行序和 QImage 相反）
 
         self._img = img
         self._img_rect = (vx, H - (vy + vh), vw, vh)

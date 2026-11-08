@@ -102,6 +102,18 @@ python WINobj.py
 
 （`scipy` 可选，装上会让 trimesh 用更快的法线算法；不装也很快，程序内置了 numpy 版本的快速顶点法线。）
 
+## 图标
+
+应用图标是仓库根目录的 `Fumofumo_icon.png`（1254×1254，四角透明），托盘、窗口和 exe 都用它。
+
+- 源码运行时从脚本同级目录查找；打包成 exe 后从 `sys._MEIPASS` 找，所以 PyInstaller 要把它一起带上：
+
+  ```
+  pyinstaller --onefile --windowed --icon=Fumofumo_icon.png --add-data "Fumofumo_icon.png;." WINobj.py
+  ```
+
+- 文件缺失时会退回原来手绘的圆形图标，托盘不会变成空白。
+
 ## 相关仓库
 
 | 仓库 | 说明 |

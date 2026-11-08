@@ -5,3 +5,6 @@
 *.jpg
 *.png
 *.glb
+
+# 应用图标要进仓库
+!Fumofumo_icon.png
