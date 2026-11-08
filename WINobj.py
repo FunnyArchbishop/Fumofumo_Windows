@@ -24,6 +24,9 @@ DATA_PATH = APPDATA_DIR / "data.json"
 MODEL_CACHE_DIR = APPDATA_DIR / "model_cache"
 LOG_PATH = APPDATA_DIR / "console.log"
 
+APP_NAME = "WINobj"
+APP_VERSION = "1.0.0"
+
 # ================= 日志 =================
 # 打包成 exe 后没有控制台窗口，print / traceback 全都看不见。
 # 这里把所有输出汇到一个环形缓冲 + 一个信号，由「控制台」窗口实时显示，同时写进日志文件。
@@ -1259,9 +1262,11 @@ def load_json_safe(path, default_dict):
 # ================= 初始化 =================
 install_log_redirect()
 log("=" * 56)
-log(f"WINobj 启动  Python {sys.version.split()[0]}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
+log(f"{APP_NAME} v{APP_VERSION} 启动  Python {sys.version.split()[0]}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
 log(f"trimesh {getattr(trimesh, '__version__', '?')}  数据目录 {APPDATA_DIR}")
 log("提示：右键系统托盘图标 → 控制台，可以随时查看这些日志")
+if getattr(sys, "frozen", False):
+    log(f"以打包 exe 运行：{sys.executable}")
 try:
     import scipy  # noqa: F401
     log("scipy 已安装（法线计算走快速路径）")

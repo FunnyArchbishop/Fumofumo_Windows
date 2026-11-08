@@ -88,9 +88,12 @@
 
 ## 下载与使用
 
-1. 在仓库右侧的 Releases 页面下载最新的 `WINobj.exe`。
-2. 双击运行，首次启动会提示选择模型文件。
-3. 程序无需安装 Python 环境。
+1. 在仓库右侧的 **Releases** 页面下载最新的 `WINobj-1.0.0-win64.zip`。
+2. 解压到任意文件夹（**整个文件夹一起**，不要只拿 exe 出去，它依赖同目录的 `_internal\`）。
+3. 双击 `WINobj.exe`，首次启动会提示选择模型文件。
+4. 程序无需安装 Python 环境。
+
+> 未签名的 exe 首次运行可能被 SmartScreen 拦一下，点「更多信息 → 仍要运行」即可。
 
 ### 从源码运行
 
@@ -104,7 +107,15 @@ python WINobj.py
 
 ## 打包成 exe
 
-直接双击仓库里的 **`build_exe.bat`**，产物在 `dist\WINobj\WINobj.exe`（把整个 `dist\WINobj\` 文件夹一起发出去）。
+直接双击仓库里的 **`build_exe.bat`**，它会依次做三件事：PyInstaller 打包 → `trim_dist.py` 裁剪没用的 Qt 模块 → 压成 zip。
+
+产物：
+
+| 路径 | 大小 | 说明 |
+| --- | --- | --- |
+| `dist\WINobj\WINobj.exe` | 15 MB | 主程序（依赖同目录 `_internal\`） |
+| `dist\WINobj\` | 178 MB / 388 文件 | 整个文件夹，可直接运行 |
+| `dist\WINobj-1.0.0-win64.zip` | **74 MB** | 发版用的压缩包 |
 
 脚本里的关键参数，以及为什么这么选：
 
@@ -116,7 +127,9 @@ python WINobj.py
 | `--add-data` 两个图标 | 不打进去的话托盘会退回手绘的圆 |
 | `--exclude-module torch / matplotlib / tkinter / scipy / pandas` | 都没用到，却会被 PyInstaller 顺手拖进来。**曾经一次打包把 torch 打了进去，体积从 200MB 涨到 670MB** |
 
-产物约 **212 MB / 390 个文件**（PySide6 93MB + pxr 46MB + numpy 26MB + PIL 13MB）。
+
+
+**裁剪**：	rim_dist.py 会删掉约 50 MB 用不到的 Qt 模块 —— `opengl32sw.dll`（19.7 MB 的软件 OpenGL 兜底，我们用 moderngl 走真实 GL）、`translations`（6.7 MB，界面文字是硬编码中文、文件对话框走系统原生）、以及 QtQuick/Qml/Pdf/Network/Svg 等整组模块。PySide6 从 93 MB 降到 44 MB。脚本会先确认 Qt6Core/Gui/Widgets 和 `qwindows` 平台插件都还在，缺一个就拒绝裁剪。
 
 > 打包环境里**不需要**装 torch / scipy。scipy 被显式排除了 —— 程序内置 numpy 版法线实现，装上只会让包大 100MB。
 >
