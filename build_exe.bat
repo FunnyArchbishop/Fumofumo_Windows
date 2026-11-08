@@ -1,24 +1,37 @@
 @echo off
 REM Build WINobj.exe (onedir mode), trim unused Qt modules, and zip the result.
 REM
+REM Usage:
+REM   build_exe.bat
+REM   set PYTHON=C:\path\to\.venv\Scripts\python.exe  ^&^&  build_exe.bat
+REM
+REM If PYTHON is not set it falls back to "python" on PATH -- make sure that one
+REM is a CLEAN env (no torch), otherwise the package balloons. The pre-flight
+REM check below prints exactly which interpreter is used.
+REM
 REM Output:
-REM   dist\WINobj\WINobj.exe            <- run this
-REM   dist\WINobj-<version>-win64.zip   <- what gets attached to a GitHub release
+REM   dist\WINobj\WINobj.exe            -^> run THIS one (needs _internal next to it)
+REM   dist\WINobj-<version>-win64.zip   -^> attach this to a GitHub release
 REM
 REM Notes:
-REM   * Run this from a Python env that has: PySide6 moderngl trimesh pillow numpy pyinstaller
 REM   * usd-core is optional. If it is NOT installed, delete the "--collect-all pxr" line.
-REM   * scipy is deliberately excluded (the app has a numpy fallback and it would add ~100 MB).
-REM   * torch / matplotlib / tkinter are excluded on purpose: unused, and they balloon the build.
-REM   * trim_dist.py removes ~50 MB of Qt modules the app never loads (see that file for the list).
+REM   * scipy is deliberately excluded (numpy fallback exists; it would add ~100 MB).
+REM   * build\ is deleted at the end: it contains a bare stub exe that cannot run alone.
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
 set VERSION=1.0.0
+if not defined PYTHON set PYTHON=python
 
-echo [1/3] PyInstaller...
-python -m PyInstaller --noconfirm --clean --onedir --windowed ^
+echo [0/4] Checking Python environment...
+"%PYTHON%" check_env.py
+if errorlevel 1 goto fail
+
+echo.
+echo [1/4] PyInstaller...
+rd /s /q build 2>nul
+"%PYTHON%" -m PyInstaller --noconfirm --clean --onedir --windowed ^
   --name WINobj ^
   --icon Fumofumo_icon.png ^
   --add-data "Fumofumo_icon.png;." ^
@@ -37,15 +50,19 @@ python -m PyInstaller --noconfirm --clean --onedir --windowed ^
 if errorlevel 1 goto fail
 
 echo.
-echo [2/3] Trimming unused Qt modules...
-python trim_dist.py
+echo [2/4] Trimming unused Qt modules...
+"%PYTHON%" trim_dist.py
 if errorlevel 1 goto fail
 
 echo.
-echo [3/3] Zipping...
+echo [3/4] Zipping...
 if exist "dist\WINobj-%VERSION%-win64.zip" del /q "dist\WINobj-%VERSION%-win64.zip"
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\WINobj\*' -DestinationPath 'dist\WINobj-%VERSION%-win64.zip' -CompressionLevel Optimal"
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\WINobj' -DestinationPath 'dist\WINobj-%VERSION%-win64.zip' -CompressionLevel Optimal"
 if errorlevel 1 goto fail
+
+echo.
+echo [4/4] Removing build folder (holds a stub exe that cannot run)...
+rd /s /q build 2>nul
 
 echo.
 echo Done.
