@@ -1,4 +1,4 @@
-import sys, json, ctypes, subprocess, os, time, webbrowser, zipfile, hashlib, shutil, threading, traceback
+import sys, json, ctypes, subprocess, os, time, zipfile, hashlib, shutil, threading, traceback
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -504,13 +504,7 @@ class ConfigDialog(QDialog):
         lbl_clear.setTextInteractionFlags(Qt.TextBrowserInteraction)
         lbl_clear.linkActivated.connect(self.clear_data)
         
-        lbl_support = QLabel("<a href='https://space.bilibili.com/1992976149' style='color: #00bfff; text-decoration: underline; font-size: 11px;'>支持我</a>")
-        lbl_support.setAlignment(Qt.AlignCenter)
-        lbl_support.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        lbl_support.setOpenExternalLinks(True)
-        
         link_layout.addWidget(lbl_clear)
-        link_layout.addWidget(lbl_support)
         main_layout.addLayout(link_layout)
         
         bottom_layout = QHBoxLayout()
