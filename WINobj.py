@@ -1,4 +1,4 @@
-import sys, json, ctypes, subprocess, os, time, webbrowser, zipfile, hashlib, shutil
+import sys, json, ctypes, subprocess, os, time, webbrowser, zipfile, hashlib, shutil, threading, traceback
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -9,9 +9,9 @@ from PySide6.QtWidgets import (QApplication, QWidget, QFileDialog, QVBoxLayout,
                                QHBoxLayout, QLabel, QProgressBar, QSystemTrayIcon, 
                                QMenu, QDialog, QSlider, QLineEdit, QCheckBox, 
                                QPushButton, QScrollArea, QFormLayout, QFrame, 
-                               QMessageBox, QGraphicsOpacityEffect)
-from PySide6.QtCore import QTimer, Qt, QPropertyAnimation, QRect
-from PySide6.QtGui import QImage, QPainter, QColor, QIcon, QPixmap, QPen
+                               QMessageBox, QGraphicsOpacityEffect, QPlainTextEdit)
+from PySide6.QtCore import QTimer, Qt, QPropertyAnimation, QRect, QObject, Signal
+from PySide6.QtGui import QImage, QPainter, QColor, QIcon, QPixmap, QPen, QFont
 
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
@@ -22,6 +22,91 @@ APPDATA_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = APPDATA_DIR / "config.json"
 DATA_PATH = APPDATA_DIR / "data.json"
 MODEL_CACHE_DIR = APPDATA_DIR / "model_cache"
+LOG_PATH = APPDATA_DIR / "console.log"
+
+# ================= 日志 =================
+# 打包成 exe 后没有控制台窗口，print / traceback 全都看不见。
+# 这里把所有输出汇到一个环形缓冲 + 一个信号，由「控制台」窗口实时显示，同时写进日志文件。
+_MAX_LOG_LINES = 2000
+
+class _LogBus(QObject):
+    new_line = Signal(str)
+
+LOG_BUS = _LogBus()
+_LOG_LINES = []
+_LOG_LOCK = threading.Lock()
+_REAL_STDOUT = sys.stdout
+_REAL_STDERR = sys.stderr
+
+
+def log(msg, level="INFO"):
+    """写一行日志。level 只影响显示宽度，不改变行为。"""
+    try:
+        stamp = time.strftime("%H:%M:%S")
+        text = str(msg).rstrip("\n")
+        for one in text.split("\n"):
+            line = f"[{stamp}] {level:<4} {one}"
+            with _LOG_LOCK:
+                _LOG_LINES.append(line)
+                if len(_LOG_LINES) > _MAX_LOG_LINES:
+                    del _LOG_LINES[:-_MAX_LOG_LINES]
+            try:
+                LOG_BUS.new_line.emit(line)
+            except Exception:
+                pass
+            stream = _REAL_STDERR if level in ("ERR", "WARN") else _REAL_STDOUT
+            if stream is not None:
+                try:
+                    stream.write(line + "\n")
+                    stream.flush()
+                except Exception:
+                    pass
+            try:
+                with _LOG_LOCK:
+                    with open(LOG_PATH, "a", encoding="utf-8") as fh:
+                        fh.write(line + "\n")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def log_lines():
+    with _LOG_LOCK:
+        return list(_LOG_LINES)
+
+
+class _StreamToLog:
+    """把 stdout / stderr 接到日志总线，顺便避免窗口模式下 print 抛异常。"""
+
+    def __init__(self, level):
+        self.level = level
+
+    def write(self, text):
+        if not text:
+            return 0
+        for line in str(text).rstrip("\n").split("\n"):
+            if line.strip():
+                log(line, self.level)
+        return len(text)
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return False
+
+
+def install_log_redirect():
+    sys.stdout = _StreamToLog("OUT")
+    sys.stderr = _StreamToLog("ERR")
+
+    def _hook(exc_type, exc, tb):
+        log("未捕获的异常：", "ERR")
+        log("".join(traceback.format_exception(exc_type, exc, tb)), "ERR")
+
+    sys.excepthook = _hook
+
 
 # 支持的模型格式（.zip 用来直接吃 Sketchfab 的下载压缩包）
 SUPPORTED_MODEL_EXTS = (".obj", ".glb", ".gltf", ".usdz", ".usd", ".usda", ".usdc")
@@ -124,6 +209,88 @@ class ToastWindow(QWidget):
     def closeEvent(self, event):
         if self in ToastWindow._instances:
             ToastWindow._instances.remove(self)
+        super().closeEvent(event)
+
+# ================= 控制台窗口 =================
+class ConsoleDialog(QDialog):
+    """实时显示日志：模型加载、格式识别、报错、以及被重定向的 print / traceback。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("WINobj 控制台")
+        self.resize(820, 460)
+        self.setStyleSheet("""
+            QDialog { background-color: #1b1b1b; }
+            QLabel { color: #cfcfcf; font-family: 'Microsoft YaHei'; font-size: 12px; }
+            QPlainTextEdit {
+                background-color: #111111; color: #d8d8d8;
+                border: 1px solid #333; border-radius: 4px;
+                selection-background-color: #0078d7;
+            }
+            QPushButton {
+                background-color: #3c3f41; color: #e0e0e0;
+                padding: 6px 14px; border-radius: 4px; border: 1px solid #555;
+            }
+            QPushButton:hover { background-color: #4a4d4f; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        self.text = QPlainTextEdit(self)
+        self.text.setReadOnly(True)
+        self.text.setMaximumBlockCount(_MAX_LOG_LINES)
+        font = QFont("Consolas")
+        font.setStyleHint(QFont.Monospace)
+        font.setPointSize(10)
+        self.text.setFont(font)
+        self.text.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.text.setPlainText("\n".join(log_lines()))
+        layout.addWidget(self.text, 1)
+
+        bottom = QHBoxLayout()
+        self.hint = QLabel(f"日志同时写入：{LOG_PATH}", self)
+        self.hint.setStyleSheet("color: #777; font-size: 11px;")
+        bottom.addWidget(self.hint)
+        bottom.addStretch()
+
+        btn_copy = QPushButton("复制全部", self)
+        btn_clear = QPushButton("清空", self)
+        btn_close = QPushButton("关闭", self)
+        btn_copy.clicked.connect(self.copy_all)
+        btn_clear.clicked.connect(self.clear_all)
+        btn_close.clicked.connect(self.close)
+        bottom.addWidget(btn_copy)
+        bottom.addWidget(btn_clear)
+        bottom.addWidget(btn_close)
+        layout.addLayout(bottom)
+
+        LOG_BUS.new_line.connect(self.append_line)
+        self._scroll_to_end()
+
+    def append_line(self, line):
+        self.text.appendPlainText(line)
+        self._scroll_to_end()
+
+    def _scroll_to_end(self):
+        bar = self.text.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def copy_all(self):
+        QApplication.clipboard().setText(self.text.toPlainText())
+        ToastWindow("日志已复制到剪贴板", 1000).show()
+
+    def clear_all(self):
+        with _LOG_LOCK:
+            _LOG_LINES.clear()
+        self.text.clear()
+
+    def closeEvent(self, event):
+        try:
+            LOG_BUS.new_line.disconnect(self.append_line)
+        except Exception:
+            pass
         super().closeEvent(event)
 
 # ================= 弹窗 =================
@@ -874,16 +1041,27 @@ def load_model_mesh(model_path):
 
     cache_key = (str(p), _cache_slot(p))
     if _MODEL_LOAD_CACHE["key"] == cache_key and _MODEL_LOAD_CACHE["mesh"] is not None:
+        log(f"模型缓存命中：{p.name}")
         return _MODEL_LOAD_CACHE["mesh"]
 
     real = resolve_model_path(p)
     ext = sniff_model_ext(real)
+    try:
+        size_mb = real.stat().st_size / 1048576.0
+    except Exception:
+        size_mb = 0.0
+    log(f"读取模型：{p.name}  →  识别为 {ext}（{size_mb:.1f} MB）")
+    if real != p:
+        log(f"压缩包已解出：{real.name}")
+
     if ext not in SUPPORTED_MODEL_EXTS:
+        log(f"不支持的格式：{ext}", "ERR")
         raise RuntimeError(
             f"暂不支持 {ext or '这种'} 格式。\n"
             "支持：.obj / .glb / .gltf / .usdz（或解压后的 .usd/.usdc），也可以直接选 .zip 压缩包。\n"
             "（扩展名改过也没关系，程序是看文件内容认格式的。）")
 
+    _t0 = time.time()
     try:
         if ext in (".usdz", ".usd", ".usda", ".usdc"):
             mesh = _load_usd_mesh(real)
@@ -897,13 +1075,15 @@ def load_model_mesh(model_path):
                 mesh = loaded
             else:
                 raise RuntimeError("读出来的内容不是三角网格。")
-    except RuntimeError:
+    except RuntimeError as e:
+        log(f"模型加载失败：{e}", "ERR")
         raise
     except Exception as e:
         hint = ""
         if ext == ".gltf":
             hint = ("\n\n提示：.gltf 依赖同目录的 .bin 和贴图文件。\n"
                     "如果是 Sketchfab 下载的包，直接把整个压缩包交给本程序（选 .zip），或改用 .glb。")
+        log(f"模型加载失败：{e}", "ERR")
         raise RuntimeError(f"模型加载失败，文件可能已损坏。{hint}\n\n详细错误：{e}")
 
     # 贴图数据立刻读进内存：之后解包目录被清掉也不影响已经载入的模型
@@ -913,6 +1093,10 @@ def load_model_mesh(model_path):
             img.load()
         except Exception:
             pass
+
+    tex_desc = f"贴图 {img.size[0]}×{img.size[1]}" if img is not None else "无贴图"
+    log(f"模型读取完成：{len(mesh.vertices)} 顶点 / {len(mesh.faces)} 面，{tex_desc}，"
+        f"耗时 {time.time() - _t0:.2f}s")
 
     _MODEL_LOAD_CACHE["key"] = cache_key
     _MODEL_LOAD_CACHE["mesh"] = mesh
@@ -962,9 +1146,11 @@ def build_mesh_data(path, custom_tex_path, current_cfg):
     if m.is_watertight:
         cm = m.center_mass
         inertia_z = max(abs(m.moment_inertia[2, 2]), 1500.0)
+        log(f"模型是封闭网格，用真实转动惯量 Iz={inertia_z:.0f}")
     else:
         cm = (m.bounds[0] + m.bounds[1]) / 2.0
         inertia_z = max((m.extents[0]**2 + m.extents[1]**2) / 12.0, 1500.0)
+        log(f"模型不是封闭网格，用包围盒估算 Iz={inertia_z:.0f}")
     m.apply_translation(-cm)
     
     try:
@@ -1018,6 +1204,17 @@ def load_json_safe(path, default_dict):
         return default_dict.copy()
 
 # ================= 初始化 =================
+install_log_redirect()
+log("=" * 56)
+log(f"WINobj 启动  Python {sys.version.split()[0]}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
+log(f"trimesh {getattr(trimesh, '__version__', '?')}  数据目录 {APPDATA_DIR}")
+log("提示：右键系统托盘图标 → 控制台，可以随时查看这些日志")
+try:
+    import scipy  # noqa: F401
+    log("scipy 已安装（法线计算走快速路径）")
+except Exception:
+    log("scipy 未安装（使用内置 numpy 法线实现）")
+
 splash = SplashWindow()
 splash.show()
 QApplication.processEvents()
@@ -1025,6 +1222,7 @@ QApplication.processEvents()
 splash.set_status(10, "正在读取配置...")
 cfg = load_json_safe(CONFIG_PATH, DEFAULT_CONFIG)
 data = load_json_safe(DATA_PATH, {"model_path": "", "custom_texture": "", "press_sound": "", "release_sound": ""})
+log("配置已读取")
 
 splash.set_status(20, "正在检查模型文件...")
 if not data.get("model_path") or not Path(data["model_path"]).exists():
@@ -1090,22 +1288,29 @@ def get_rotation_matrix(wx, wy, wz, dt):
     ], dtype='f4')
 
 splash.set_status(40, "正在加载 3D 模型...")
+log(f"当前模型：{model_path}")
 
 try:
     verts, normals, tex_uv, Iz, tex_image = build_mesh_data(model_path, data.get("custom_texture", ""), cfg)
 except Exception as e:
     splash.hide()
     QMessageBox.critical(None, "模型加载失败", str(e))
+    log("启动中止：模型加载失败", "ERR")
     sys.exit(1)
 
 screen = app.primaryScreen().size()
 W = screen.width()
 H = screen.height()
+log(f"屏幕 {W}×{H}，网格 {len(verts)} 个顶点（{len(verts)//3} 个三角面）")
 
 ctx = moderngl.create_standalone_context()
 fbo_tex = ctx.texture((W, H), 4)
 fbo_depth = ctx.depth_texture((W, H))
 fbo = ctx.framebuffer(color_attachments=[fbo_tex], depth_attachment=fbo_depth)
+try:
+    log(f"OpenGL {ctx.info.get('GL_VERSION', '?')} / {ctx.info.get('GL_RENDERER', '?')}")
+except Exception:
+    log("OpenGL 上下文已创建（读不到版本信息）")
 
 prog = ctx.program(
     vertex_shader='''
@@ -1201,6 +1406,7 @@ class Pet(QWidget):
         self.keys_pressed = set()
         self._img = self._img_rect = None
         self.config_dialog = None
+        self.console_dialog = None
         self._loaded_model_path = model_path
         
         self._last_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
@@ -1229,14 +1435,24 @@ class Pet(QWidget):
         
         menu = QMenu()
         menu.setStyleSheet("QMenu { background-color: #2b2b2b; color: white; border: 1px solid #555; } QMenu::item:selected { background-color: #00bfff; color: black; }")
+        action_console = menu.addAction("控制台")
         action_config = menu.addAction("配置文件")
         action_quit = menu.addAction("退出")
+        action_console.triggered.connect(self.open_console)
         action_config.triggered.connect(self.open_config)
         action_quit.triggered.connect(self.exit_app)
         
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(lambda r: self.open_config() if r == QSystemTrayIcon.DoubleClick else None)
         self.tray_icon.show()
+
+    def open_console(self):
+        if not self.console_dialog or not self.console_dialog.isVisible():
+            self.console_dialog = ConsoleDialog(self)
+            self.console_dialog.show()
+        else:
+            self.console_dialog.raise_()
+            self.console_dialog.activateWindow()
 
     def open_config(self):
         if not self.config_dialog or not self.config_dialog.isVisible():
@@ -1256,9 +1472,12 @@ class Pet(QWidget):
         
         current_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
         if self._last_geom_cfg != current_geom_cfg:
+            log(f"几何参数变化，重建网格：scale={cfg['model_scale']} "
+                f"height={cfg['target_height_ratio']} flip={cfg['flip_texture']}")
             try:
                 verts, normals, tex_uv, Iz, tex_image = build_mesh_data(model_path, data.get("custom_texture", ""), cfg)
             except Exception as e:
+                log(f"模型重载失败：{e}", "ERR")
                 ToastWindow(f"模型重载失败: {e}", 2000).show()
                 return
                 
@@ -1275,7 +1494,9 @@ class Pet(QWidget):
                     tex.repeat_x = tex.repeat_y = False
                     tex.build_mipmaps(); tex.use(0)
                     prog['tex'] = 0; prog['has_tex'] = 1.0
-                except Exception:
+                    log(f"贴图已上传：{tw}×{th}")
+                except Exception as e:
+                    log(f"贴图上传失败：{e}", "ERR")
                     if tex: tex.release()
                     tex = None
                     prog['has_tex'] = 0.0
@@ -1283,8 +1504,10 @@ class Pet(QWidget):
                 if tex: tex.release()
                 tex = None
                 prog['has_tex'] = 0.0
+                log("没有贴图，使用纯色渲染")
                 
             self._last_geom_cfg = current_geom_cfg
+            log(f"网格已更新：{len(verts)} 个顶点")
             
             self.cx, self.cy = float(W/2), float(H/2)
             self.vx = self.vy = 0.0
@@ -1302,9 +1525,11 @@ class Pet(QWidget):
         if should_reset:
             reset_model_cache_dir()
             self._loaded_model_path = model_path
+        log(f"切换模型：{model_path}")
         try:
             verts, normals, tex_uv, Iz, tex_image = build_mesh_data(model_path, data.get("custom_texture", ""), cfg)
         except Exception as e:
+            log(f"模型加载失败：{e}", "ERR")
             ToastWindow(f"模型加载失败: {e}", 3000).show()
             return
         
@@ -1321,7 +1546,9 @@ class Pet(QWidget):
                 tex.repeat_x = tex.repeat_y = False
                 tex.build_mipmaps(); tex.use(0)
                 prog['tex'] = 0; prog['has_tex'] = 1.0
-            except Exception:
+                log(f"贴图已上传：{tw}×{th}")
+            except Exception as e:
+                log(f"贴图上传失败：{e}", "ERR")
                 if tex: tex.release()
                 tex = None
                 prog['has_tex'] = 0.0
@@ -1329,8 +1556,10 @@ class Pet(QWidget):
             if tex: tex.release()
             tex = None
             prog['has_tex'] = 0.0
+            log("没有贴图，使用纯色渲染")
             
         self._last_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
+        log(f"新模型已生效：{len(verts)} 个顶点（{len(verts)//3} 个三角面）")
         
         self.cx, self.cy = float(W/2), float(H/2)
         self.vx = self.vy = 0.0
