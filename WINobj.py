@@ -118,10 +118,11 @@ def resource_path(name):
 
 
 ICON_PATH = resource_path("Fumofumo_icon.png")
+TRAY_ICON_PATH = resource_path("Fumofumo_tray.ico")
 
 
 def load_app_icon():
-    """优先用 Fumofumo_icon.png；文件缺失时退回原来手绘的圆，保证托盘一定有图标。"""
+    """窗口/任务栏图标：用大图。文件缺失时退回原来手绘的圆，保证一定有图标。"""
     try:
         if ICON_PATH.exists():
             pm = QPixmap(str(ICON_PATH))
@@ -140,6 +141,18 @@ def load_app_icon():
     painter.drawEllipse(10, 10, 108, 108)
     painter.end()
     return QIcon(pm)
+
+
+def load_tray_icon():
+    """托盘图标：Windows 托盘只有 16~24 px，用专门的多尺寸 ico 比直接缩大图清楚得多。"""
+    try:
+        if TRAY_ICON_PATH.exists():
+            icon = QIcon(str(TRAY_ICON_PATH))
+            if not icon.isNull():
+                return icon
+    except Exception:
+        pass
+    return load_app_icon()
 
 
 # 支持的模型格式（.zip 用来直接吃 Sketchfab 的下载压缩包）
@@ -1446,9 +1459,8 @@ class Pet(QWidget):
 
     def setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
-        app_icon = load_app_icon()
-        self.setWindowIcon(app_icon)
-        self.tray_icon.setIcon(app_icon)
+        self.setWindowIcon(load_app_icon())
+        self.tray_icon.setIcon(load_tray_icon())
         self.tray_icon.setToolTip("WINobj 桌宠")
         
         menu = QMenu()

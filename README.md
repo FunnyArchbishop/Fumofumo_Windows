@@ -112,6 +112,7 @@ python WINobj.py
   pyinstaller --onefile --windowed --icon=Fumofumo_icon.png --add-data "Fumofumo_icon.png;." WINobj.py
   ```
 
+- **托盘图标单独做了小尺寸版** `Fumofumo_tray.ico`（含 16/20/24/32/48/64 六个尺寸）。Windows 托盘只有 16~24 px，直接把 1254² 的大图缩下去会糊成一团，所以这张 ico 额外提了对比度和饱和度，缩到 16×16 也能看出轮廓。Qt 会按系统 DPI 自动挑合适的尺寸。
 - 文件缺失时会退回原来手绘的圆形图标，托盘不会变成空白。
 
 ## 相关仓库
