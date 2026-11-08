@@ -9,3 +9,8 @@
 # 应用图标要进仓库
 !Fumofumo_icon.png
 !Fumofumo_tray.ico
+
+# PyInstaller 构建产物（用 build_exe.bat 重新生成）
+build/
+dist/
+*.spec

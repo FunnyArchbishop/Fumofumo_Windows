@@ -102,15 +102,33 @@ python WINobj.py
 
 （`scipy` 可选，装上会让 trimesh 用更快的法线算法；不装也很快，程序内置了 numpy 版本的快速顶点法线。）
 
+## 打包成 exe
+
+直接双击仓库里的 **`build_exe.bat`**，产物在 `dist\WINobj\WINobj.exe`（把整个 `dist\WINobj\` 文件夹一起发出去）。
+
+脚本里的关键参数，以及为什么这么选：
+
+| 参数 | 原因 |
+| --- | --- |
+| `--onedir` | 输出一个文件夹，启动比 `--onefile` 快，也不用每次解压到临时目录 |
+| `--windowed` | 不要黑框控制台。日志看托盘 → 控制台（同时写 `%APPDATA%\WINobj\console.log`） |
+| `--collect-all pxr` | **必需**。否则 `pxr` 里 30 个原生 `.pyd` 一个都进不去，`.usdz` 会报"缺解析库" |
+| `--add-data` 两个图标 | 不打进去的话托盘会退回手绘的圆 |
+| `--exclude-module torch / matplotlib / tkinter / scipy / pandas` | 都没用到，却会被 PyInstaller 顺手拖进来。**曾经一次打包把 torch 打了进去，体积从 200MB 涨到 670MB** |
+
+产物约 **212 MB / 390 个文件**（PySide6 93MB + pxr 46MB + numpy 26MB + PIL 13MB）。
+
+> 打包环境里**不需要**装 torch / scipy。scipy 被显式排除了 —— 程序内置 numpy 版法线实现，装上只会让包大 100MB。
+>
+> 没装 `usd-core` 的话，把脚本里 `--collect-all pxr` 那行删掉，其余格式照常使用。
+
+`build/`、`dist/`、`*.spec` 都在 `.gitignore` 里，不会进仓库。
+
 ## 图标
 
 应用图标是仓库根目录的 `Fumofumo_icon.png`（1254×1254，四角透明），托盘、窗口和 exe 都用它。
 
-- 源码运行时从脚本同级目录查找；打包成 exe 后从 `sys._MEIPASS` 找，所以 PyInstaller 要把它一起带上：
-
-  ```
-  pyinstaller --onefile --windowed --icon=Fumofumo_icon.png --add-data "Fumofumo_icon.png;." WINobj.py
-  ```
+- 源码运行时从脚本同级目录查找；打包成 exe 后从 `sys._MEIPASS` 找，所以 `build_exe.bat` 里用 `--add-data` 把它一起带上。
 
 - **托盘图标单独做了小尺寸版** `Fumofumo_tray.ico`（含 16/20/24/32/48/64 六个尺寸）。Windows 托盘只有 16~24 px，直接把 1254² 的大图缩下去会糊成一团，所以这张 ico 额外提了对比度和饱和度，缩到 16×16 也能看出轮廓。Qt 会按系统 DPI 自动挑合适的尺寸。
 - 文件缺失时会退回原来手绘的圆形图标，托盘不会变成空白。

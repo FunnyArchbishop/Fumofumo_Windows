@@ -102,8 +102,17 @@ def install_log_redirect():
     sys.stderr = _StreamToLog("ERR")
 
     def _hook(exc_type, exc, tb):
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
         log("未捕获的异常：", "ERR")
-        log("".join(traceback.format_exception(exc_type, exc, tb)), "ERR")
+        log(text, "ERR")
+        # 打包成 --windowed 的 exe 时没有控制台，崩溃必须弹个窗，否则什么都不显示
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                None, "WINobj 出错",
+                f"{exc_type.__name__}: {exc}\n\n详细信息已写入：\n{LOG_PATH}")
+        except Exception:
+            pass
 
     sys.excepthook = _hook
 
@@ -875,12 +884,15 @@ def _load_usd_mesh(path):
     """
     try:
         from pxr import Usd, UsdGeom, UsdShade, Sdf
-    except Exception:
+    except Exception as _e:
+        # 打包成 exe 后最常见的失败是 pxr 的原生模块没被收进去，把真实原因写进日志
+        log(f"导入 pxr 失败：{type(_e).__name__}: {_e}", "ERR")
         raise RuntimeError(
             "打开 USD 模型需要一个额外的解析库（Pixar 官方 OpenUSD）。\n\n"
             "请在命令行执行：\n    pip install usd-core\n"
             "装好之后再打开本程序即可。\n\n"
-            "（不想装的话，也可以用 Sketchfab 的 .glb 下载，那个不需要额外依赖。）")
+            "（不想装的话，也可以用 Sketchfab 的 .glb 下载，那个不需要额外依赖。）\n\n"
+            f"实际错误：{_e}")
 
     p = Path(path)
     if sniff_model_ext(p) == ".usdz":
