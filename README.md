@@ -1,6 +1,28 @@
-# WINobj 3D桌面宠物
+# Fumofumo_Windows
+
+> 本仓库原名 `WINobj`，现已重命名为 `Fumofumo_Windows`。
+> 程序本身、可执行文件名与配置目录仍叫 **WINobj**（`WINobj.exe`、`%APPDATA%\WINobj`），没有改动。
 
 一个用 Python 编写的 3D 桌面宠物程序。支持加载 `.obj`、`.glb`、`.gltf`、`.usdz`（以及解压后的 `.usdc`/`.usda`）模型，也可以直接丢进 Sketchfab 下载的 `.zip` 包；并具备物理碰撞、重力下落、鼠标拖拽和键盘翻转功能。
+
+## 来源与致谢
+
+本仓库基于 **[CaxyLZ/WINobj](https://github.com/CaxyLZ/WINobj)** 开发，感谢原作者。
+
+| | |
+| --- | --- |
+| 上游仓库 | https://github.com/CaxyLZ/WINobj |
+| 原作者 | CaxyLZ |
+| 许可 | MIT（保留原始版权声明，见 [LICENSE](LICENSE)） |
+
+本仓库在上游基础上的改动：
+
+- **多格式支持**：`.glb` / `.gltf` / `.usdz` / `.usdc` / `.usda` / `.obj` / `.zip`（上游只支持 `.obj`）
+- **格式嗅探**：按文件头判断真实格式，扩展名被改过（`.circ`、`.bin`、无扩展名）也能读
+- **场景扁平化**：自己实现，避免 `Scene.to_mesh()` 在多材质时烘焙出全透明贴图导致模型消失
+- **贴图提取**：兼容 trimesh 5.x 的 `baseColorTexture` / `emissiveTexture`（不再依赖已移除的 `.image`）
+- **性能**：没装 scipy 时用 numpy 面积加权法线，十万面模型从 ~25 秒降到 ~0.1 秒
+- **显存**：顶点数变化时重建 VBO/VAO（moderngl 的 buffer 不会自动扩容）
 
 ## 功能特性
 
@@ -53,6 +75,11 @@ python WINobj.py
 
 （`scipy` 可选，装上会让 trimesh 用更快的法线算法；不装也很快，程序内置了 numpy 版本的快速顶点法线。）
 
+## 相关仓库
+
+- **[Fumofumo_Mobile](https://github.com/FunnyArchbishop/Fumofumo_Mobile)** —— 同一只桌宠的 Android 版（Kotlin + OpenGL ES，悬浮在其他应用之上）
+- **[Fumofumo_Models](https://github.com/FunnyArchbishop/Fumofumo_Models)** —— 20 个 fumo 3D 扫描模型（CC BY 4.0，含完整署名）
+
 ## 开源协议
 
-MIT License
+MIT License。本仓库保留上游 CaxyLZ 的原始版权声明，并补充本仓库修改部分的版权声明，详见 [LICENSE](LICENSE)。
