@@ -77,8 +77,12 @@ python WINobj.py
 
 ## 相关仓库
 
-- **[Fumofumo_Mobile](https://github.com/FunnyArchbishop/Fumofumo_Mobile)** —— 同一只桌宠的 Android 版（Kotlin + OpenGL ES，悬浮在其他应用之上）
-- **[Fumofumo_Models](https://github.com/FunnyArchbishop/Fumofumo_Models)** —— 20 个 fumo 3D 扫描模型（CC BY 4.0，含完整署名）
+| 仓库 | 说明 |
+| --- | --- |
+| **[Fumofumo_Windows](https://github.com/FunnyArchbishop/Fumofumo_Windows)** | ← 你在这里：Windows 桌面版（Python + Qt + moderngl） |
+| [Fumofumo_Mobile](https://github.com/FunnyArchbishop/Fumofumo_Mobile) | 同一只桌宠的 Android 版（Kotlin + OpenGL ES 3.0，悬浮在其他应用之上） |
+| [Fumofumo_Models](https://github.com/FunnyArchbishop/Fumofumo_Models) | 20 个 fumo 3D 扫描模型（CC BY 4.0，含完整署名），两个版本都能直接导入 |
+| [CaxyLZ/WINobj](https://github.com/CaxyLZ/WINobj) | 上游原始项目（本仓库的起点） |
 
 ## 开源协议
 
