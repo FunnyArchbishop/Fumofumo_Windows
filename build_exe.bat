@@ -1,5 +1,5 @@
 @echo off
-REM Build WINobj.exe (onedir mode), trim unused Qt modules, and zip the result.
+REM Build Fumofumo.exe (onedir mode), trim unused Qt modules, and zip the result.
 REM
 REM Usage:
 REM   build_exe.bat
@@ -10,8 +10,8 @@ REM is a CLEAN env (no torch), otherwise the package balloons. The pre-flight
 REM check below prints exactly which interpreter is used.
 REM
 REM Output:
-REM   dist\WINobj\WINobj.exe            -^> run THIS one (needs _internal next to it)
-REM   dist\WINobj-<version>-win64.zip   -^> attach this to a GitHub release
+REM   dist\Fumofumo\Fumofumo.exe            -^> run THIS one (needs _internal next to it)
+REM   dist\Fumofumo-<version>-win64.zip   -^> attach this to a GitHub release
 REM
 REM Notes:
 REM   * usd-core is optional. If it is NOT installed, delete the "--collect-all pxr" line.
@@ -21,7 +21,7 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-set VERSION=1.0.0
+set VERSION=1.2.0
 if not defined PYTHON set PYTHON=python
 
 echo [0/4] Checking Python environment...
@@ -32,7 +32,7 @@ echo.
 echo [1/4] PyInstaller...
 rd /s /q build 2>nul
 "%PYTHON%" -m PyInstaller --noconfirm --clean --onedir --windowed ^
-  --name WINobj ^
+  --name Fumofumo ^
   --icon Fumofumo_icon.png ^
   --add-data "Fumofumo_icon.png;." ^
   --add-data "Fumofumo_tray.ico;." ^
@@ -46,7 +46,7 @@ rd /s /q build 2>nul
   --exclude-module scipy ^
   --exclude-module pytest ^
   --exclude-module pandas ^
-  WINobj.py
+  Fumofumo.py
 if errorlevel 1 goto fail
 
 echo.
@@ -56,8 +56,8 @@ if errorlevel 1 goto fail
 
 echo.
 echo [3/4] Zipping...
-if exist "dist\WINobj-%VERSION%-win64.zip" del /q "dist\WINobj-%VERSION%-win64.zip"
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\WINobj' -DestinationPath 'dist\WINobj-%VERSION%-win64.zip' -CompressionLevel Optimal"
+if exist "dist\Fumofumo-%VERSION%-win64.zip" del /q "dist\Fumofumo-%VERSION%-win64.zip"
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\Fumofumo' -DestinationPath 'dist\Fumofumo-%VERSION%-win64.zip' -CompressionLevel Optimal"
 if errorlevel 1 goto fail
 
 echo.
@@ -66,8 +66,8 @@ rd /s /q build 2>nul
 
 echo.
 echo Done.
-echo   exe : dist\WINobj\WINobj.exe
-echo   zip : dist\WINobj-%VERSION%-win64.zip
+echo   exe : dist\Fumofumo\Fumofumo.exe
+echo   zip : dist\Fumofumo-%VERSION%-win64.zip
 pause
 exit /b 0
 

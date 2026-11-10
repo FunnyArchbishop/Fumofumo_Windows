@@ -16,7 +16,8 @@ from PySide6.QtGui import QImage, QPainter, QColor, QIcon, QPixmap, QPen, QFont,
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 
-APPDATA_DIR = Path(os.getenv('APPDATA')) / "WINobj"
+APPDATA_DIR = Path(os.getenv('APPDATA')) / "Fumofumo"
+LEGACY_APPDATA_DIR = Path(os.getenv('APPDATA')) / "WINobj"
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CONFIG_PATH = APPDATA_DIR / "config.json"
@@ -24,8 +25,8 @@ DATA_PATH = APPDATA_DIR / "data.json"
 MODEL_CACHE_DIR = APPDATA_DIR / "model_cache"
 LOG_PATH = APPDATA_DIR / "console.log"
 
-APP_NAME = "WINobj"
-APP_VERSION = "1.0.0"
+APP_NAME = "Fumofumo"
+APP_VERSION = "1.2.0"
 
 # ================= 日志 =================
 # 打包成 exe 后没有控制台窗口，print / traceback 全都看不见。
@@ -112,7 +113,7 @@ def install_log_redirect():
         try:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(
-                None, "WINobj 出错",
+                None, "Fumofumo 出错",
                 f"{exc_type.__name__}: {exc}\n\n详细信息已写入：\n{LOG_PATH}")
         except Exception:
             pass
@@ -127,6 +128,24 @@ def resource_path(name):
     if base:
         return Path(base) / name
     return Path(__file__).resolve().parent / name
+
+
+def migrate_legacy_appdata():
+    """程序以前叫 WINobj，配置放在 %APPDATA%\\WINobj。
+
+    升级后目录改成了 %APPDATA%\\Fumofumo，这里把旧配置搬过来，
+    免得老用户要重新选模型、重新调参数。旧目录保留不删。
+    """
+    try:
+        if not LEGACY_APPDATA_DIR.exists():
+            return
+        # 只看配置文件：程序启动时已经往新目录写过 console.log，不能拿"目录非空"当依据
+        if CONFIG_PATH.exists() or DATA_PATH.exists():
+            return          # 新目录已经有配置了，不覆盖
+        shutil.copytree(LEGACY_APPDATA_DIR, APPDATA_DIR, dirs_exist_ok=True)
+        log(f"已把旧配置从 %APPDATA%\\{LEGACY_APPDATA_DIR.name} 迁移到 %APPDATA%\\{APPDATA_DIR.name}")
+    except Exception as e:
+        log(f"旧配置迁移失败（不影响使用）：{e}", "WARN")
 
 
 ICON_PATH = resource_path("Fumofumo_icon.png")
@@ -192,7 +211,7 @@ class SplashWindow(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 10, 20, 10)
         
-        self.label = QLabel("正在启动 WINobj...", self)
+        self.label = QLabel("正在启动 Fumofumo...", self)
         self.label.setAlignment(Qt.AlignCenter)
         self.label.setStyleSheet("color: #e0e0e0; font-size: 13px; font-family: 'Microsoft YaHei';")
         
@@ -276,7 +295,7 @@ class ConsoleDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("WINobj 控制台")
+        self.setWindowTitle("Fumofumo 控制台")
         self.resize(820, 460)
         self.setStyleSheet("""
             QDialog { background-color: #1b1b1b; }
@@ -431,7 +450,7 @@ CONFIG_META = {
 class ConfigDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("WINobj 配置面板")
+        self.setWindowTitle("Fumofumo 配置面板")
         self.setFixedSize(420, 650)
         self.setStyleSheet("""
             QDialog { background-color: #2b2b2b; }
@@ -1278,6 +1297,7 @@ splash.show()
 QApplication.processEvents()
 
 splash.set_status(10, "正在读取配置...")
+migrate_legacy_appdata()
 cfg = load_json_safe(CONFIG_PATH, DEFAULT_CONFIG)
 data = load_json_safe(DATA_PATH, {"model_path": "", "custom_texture": "", "press_sound": "", "release_sound": ""})
 log("配置已读取")
@@ -1318,13 +1338,13 @@ mci = ctypes.windll.winmm.mciSendStringW
 
 def close_all_audio():
     for i in [1, 2]:
-        mci(f'close winobj_{i}', None, 0, 0)
+        mci(f'close fumofumo_{i}', None, 0, 0)
 
 def play_sound(key):
     sound_path = data.get(key)
     if not sound_path or not Path(sound_path).exists(): return
     close_all_audio()
-    alias = f"winobj_{1 if key == 'press_sound' else 2}"
+    alias = f"fumofumo_{1 if key == 'press_sound' else 2}"
     vol = int(cfg.get("audio_volume", 650))
     mci(f'open "{sound_path}" type mpegvideo alias {alias}', None, 0, 0)
     mci(f'setaudio {alias} volume to {vol}', None, 0, 0)
@@ -1478,7 +1498,7 @@ class Pet(QWidget):
         self.tray_icon = QSystemTrayIcon(self)
         self.setWindowIcon(load_app_icon())
         self.tray_icon.setIcon(load_tray_icon())
-        self.tray_icon.setToolTip("WINobj 桌宠")
+        self.tray_icon.setToolTip("Fumofumo 桌宠")
         
         menu = QMenu()
         menu.setStyleSheet("QMenu { background-color: #2b2b2b; color: white; border: 1px solid #555; } QMenu::item:selected { background-color: #00bfff; color: black; }")

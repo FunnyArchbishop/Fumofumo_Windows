@@ -1,7 +1,7 @@
-# Fumofumo_Windows
+﻿# Fumofumo_Windows
 
-> 本仓库原名 `WINobj`，现已重命名为 `Fumofumo_Windows`。
-> 程序本身、可执行文件名与配置目录仍叫 **WINobj**（`WINobj.exe`、`%APPDATA%\WINobj`），没有改动。
+> 本程序原名 **WINobj**，从 v1.2.0 起统一改名为 **Fumofumo**：可执行文件是 `Fumofumo.exe`，配置目录是 `%APPDATA%\Fumofumo`。
+> 升级时会自动把旧的 `%APPDATA%\WINobj` 配置搬过来，不用重新选模型、重新调参数。
 
 一个用 Python 编写的 3D 桌面宠物程序。支持加载 `.obj`、`.glb`、`.gltf`、`.usdz`（以及解压后的 `.usdc`/`.usda`）模型，也可以直接丢进 Sketchfab 下载的 `.zip` 包；并具备物理碰撞、重力下落、鼠标拖拽和键盘翻转功能。
 
@@ -31,7 +31,7 @@
 - 键盘控制：按住鼠标时，可用键盘精准控制 3D 模型的旋转。
 - 热重载：在配置面板修改参数或更换模型，保存后即刻生效，无需重启（换更大的模型也行）。
 - 自定义音效：可分别设置“按下”和“松开”时的音效。
-- 数据集中：所有配置和数据统一保存在系统的 `%APPDATA%\WINobj` 文件夹。
+- 数据集中：所有配置和数据统一保存在系统的 `%APPDATA%\Fumofumo` 文件夹。
 
 ## 支持的模型格式
 
@@ -65,8 +65,8 @@
 
 ```
 [23:44:03] INFO ========================================================
-[23:44:03] INFO WINobj 启动  Python 3.13.5  2026-11-08 23:44:03
-[23:44:03] INFO trimesh 5.2.0  数据目录 C:\Users\...\AppData\Roaming\WINobj
+[23:44:03] INFO Fumofumo 启动  Python 3.13.5  2026-11-08 23:44:03
+[23:44:03] INFO trimesh 5.2.0  数据目录 C:\Users\...\AppData\Roaming\Fumofumo
 [23:44:03] INFO scipy 未安装（使用内置 numpy 法线实现）
 [23:44:04] INFO 读取模型：project-reimu-fumo-3d-scan.glb  →  识别为 .glb（4.4 MB）
 [23:44:04] INFO 模型读取完成：11736 顶点 / 9999 面，贴图 1024×1024，耗时 0.12s
@@ -84,13 +84,13 @@
 
 窗口里有「复制全部」「清空」「关闭」三个按钮，方便把日志贴出来反馈问题。
 
-日志同时**追加写入** `%APPDATA%\WINobj\console.log`，重启后不会丢；程序内的内存缓冲保留最近 2000 行。
+日志同时**追加写入** `%APPDATA%\Fumofumo\console.log`，重启后不会丢；程序内的内存缓冲保留最近 2000 行。
 
 ## 下载与使用
 
-1. 在仓库右侧的 **Releases** 页面下载最新的 `WINobj-1.0.0-win64.zip`。
+1. 在仓库右侧的 **Releases** 页面下载最新的 `Fumofumo-1.2.0-win64.zip`。
 2. 解压到任意文件夹（**整个文件夹一起**，不要只拿 exe 出去，它依赖同目录的 `_internal\`）。
-3. 双击 `WINobj.exe`，首次启动会提示选择模型文件。
+3. 双击 `Fumofumo.exe`，首次启动会提示选择模型文件。
 4. 程序无需安装 Python 环境。
 
 > 未签名的 exe 首次运行可能被 SmartScreen 拦一下，点「更多信息 → 仍要运行」即可。
@@ -100,7 +100,7 @@
 ```bash
 pip install PySide6 moderngl trimesh pillow numpy
 pip install usd-core   # 可选，只为了打开 .usdz / .usdc
-python WINobj.py
+python Fumofumo.py
 ```
 
 （`scipy` 可选，装上会让 trimesh 用更快的法线算法；不装也很快，程序内置了 numpy 版本的快速顶点法线。）
@@ -113,16 +113,16 @@ python WINobj.py
 
 | 路径 | 大小 | 说明 |
 | --- | --- | --- |
-| `dist\WINobj\WINobj.exe` | 15 MB | 主程序（依赖同目录 `_internal\`） |
-| `dist\WINobj\` | 178 MB / 388 文件 | 整个文件夹，可直接运行 |
-| `dist\WINobj-1.0.0-win64.zip` | **74 MB** | 发版用的压缩包 |
+| `dist\Fumofumo\Fumofumo.exe` | 6 MB | 主程序（依赖同目录 `_internal\`） |
+| `dist\Fumofumo\` | 163 MB / 362 文件 | 整个文件夹，可直接运行 |
+| `dist\Fumofumo-1.2.0-win64.zip` | **62 MB** | 发版用的压缩包 |
 
 脚本里的关键参数，以及为什么这么选：
 
 | 参数 | 原因 |
 | --- | --- |
 | `--onedir` | 输出一个文件夹，启动比 `--onefile` 快，也不用每次解压到临时目录 |
-| `--windowed` | 不要黑框控制台。日志看托盘 → 控制台（同时写 `%APPDATA%\WINobj\console.log`） |
+| `--windowed` | 不要黑框控制台。日志看托盘 → 控制台（同时写 `%APPDATA%\Fumofumo\console.log`） |
 | `--collect-all pxr` | **必需**。否则 `pxr` 里 30 个原生 `.pyd` 一个都进不去，`.usdz` 会报"缺解析库" |
 | `--add-data` 两个图标 | 不打进去的话托盘会退回手绘的圆 |
 | `--exclude-module torch / matplotlib / tkinter / scipy / pandas` | 都没用到，却会被 PyInstaller 顺手拖进来。**曾经一次打包把 torch 打了进去，体积从 200MB 涨到 670MB** |

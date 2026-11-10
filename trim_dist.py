@@ -1,4 +1,4 @@
-"""Delete files from dist/WINobj that WINobj never uses, to shrink the package.
+"""Delete files from dist/Fumofumo that Fumofumo never uses, to shrink the package.
 
 Called at the end of build_exe.bat. Everything removed here is a Qt module or
 resource this app does not touch:
@@ -16,7 +16,7 @@ Run with --dry-run to see what would be removed.
 import sys
 from pathlib import Path
 
-DIST = Path(__file__).resolve().parent / "dist" / "WINobj"
+DIST = Path(__file__).resolve().parent / "dist" / "Fumofumo"
 INTERNAL = DIST / "_internal"
 PS = INTERNAL / "PySide6"
 
