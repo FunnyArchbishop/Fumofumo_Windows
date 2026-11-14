@@ -21,7 +21,7 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-set VERSION=1.2.0
+set VERSION=1.3.0
 if not defined PYTHON set PYTHON=python
 
 echo [0/4] Checking Python environment...

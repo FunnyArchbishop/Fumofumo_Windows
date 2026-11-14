@@ -86,9 +86,46 @@
 
 日志同时**追加写入** `%APPDATA%\Fumofumo\console.log`，重启后不会丢；程序内的内存缓冲保留最近 2000 行。
 
+## 状态记录
+
+退出时会把这个模型**连同它当时的全部参数和运动状态**写进 `%APPDATA%\Fumofumo\state.json`，下次启动自动还原，桌宠不会每次都从屏幕正中重新掉下来。
+
+记录的内容：
+
+| 分类 | 字段 |
+| --- | --- |
+| 模型 | `model_path`、`model_name`、`custom_texture` |
+| 全部参数 | `gravity`、`restitution`、`friction`、`air_drag`、`throw_multiplier`、`max_speed`、`model_scale`、`target_height_ratio`、`flip_texture`、`ambient_light`、`gamma`、`audio_volume` |
+| 运动状态 | `cx`/`cy`（位置）、`vx`/`vy`（线速度）、`wx`/`wy`/`wz`（角速度）、`speed`、`spin`、`rot`（3×3 旋转矩阵） |
+| 几何 | `vertices`、`triangles`、`inertia_z` |
+| 环境 | `screen`（分辨率）、`saved_at`、`app_version` |
+
+```
+{
+  "model_name": "project-reimu-fumo-3d-scan.glb",
+  "params": {"gravity": 2500.0, "restitution": 0.3, ...},
+  "motion": {
+    "cx": 1460.96, "cy": 102.74,
+    "vx": -32.40, "vy": -2.59,
+    "wx": -0.59, "wy": 0.19, "wz": 0.31,
+    "speed": 32.5, "spin": 0.70,
+    "rot": [[0.333, 0.869, -0.366], ...]
+  },
+  "geometry": {"vertices": 29997, "triangles": 9999, "inertia_z": 6868.98}
+}
+```
+
+几个细节：
+
+- **每 10 秒自动记录一次**，所以即使程序被强杀也不会丢掉大致位置；正常退出时再记一次（控制台里会打印位置、速度、角速度和全部参数）
+- **换模型时也会记一次**
+- 启动还原时如果**模型和上次不一样**，只加载新模型、不套用旧的运动状态
+- 速度超过 3000 px/s 或角速度超过 6 rad/s 会被**归零**，免得一启动就飞出屏幕
+- **屏幕分辨率变了**会按比例把位置换算过去
+
 ## 下载与使用
 
-1. 在仓库右侧的 **Releases** 页面下载最新的 `Fumofumo-1.2.0-win64.zip`。
+1. 在仓库右侧的 **Releases** 页面下载最新的 `Fumofumo-1.3.0-win64.zip`。
 2. 解压到任意文件夹（**整个文件夹一起**，不要只拿 exe 出去，它依赖同目录的 `_internal\`）。
 3. 双击 `Fumofumo.exe`，首次启动会提示选择模型文件。
 4. 程序无需安装 Python 环境。
@@ -115,7 +152,7 @@ python Fumofumo.py
 | --- | --- | --- |
 | `dist\Fumofumo\Fumofumo.exe` | 6 MB | 主程序（依赖同目录 `_internal\`） |
 | `dist\Fumofumo\` | 163 MB / 362 文件 | 整个文件夹，可直接运行 |
-| `dist\Fumofumo-1.2.0-win64.zip` | **62 MB** | 发版用的压缩包 |
+| `dist\Fumofumo-1.3.0-win64.zip` | **62 MB** | 发版用的压缩包 |
 
 脚本里的关键参数，以及为什么这么选：
 

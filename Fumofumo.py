@@ -1,4 +1,4 @@
-import sys, json, ctypes, os, time, zipfile, hashlib, shutil, threading, traceback
+﻿import sys, json, ctypes, os, time, zipfile, hashlib, shutil, threading, traceback
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -24,9 +24,10 @@ CONFIG_PATH = APPDATA_DIR / "config.json"
 DATA_PATH = APPDATA_DIR / "data.json"
 MODEL_CACHE_DIR = APPDATA_DIR / "model_cache"
 LOG_PATH = APPDATA_DIR / "console.log"
+STATE_PATH = APPDATA_DIR / "state.json"
 
 APP_NAME = "Fumofumo"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 # ================= 日志 =================
 # 打包成 exe 后没有控制台窗口，print / traceback 全都看不见。
@@ -1490,9 +1491,16 @@ class Pet(QWidget):
         self._last_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
         
         self.setup_tray()
+        self.restore_state()
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(16)
+
+        # 每 10 秒自动记录一次，程序被强杀 / 断电也能留下大致位置
+        self._state_timer = QTimer()
+        self._state_timer.timeout.connect(lambda: self.save_state("自动", quiet=True))
+        self._state_timer.start(10000)
 
     def setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -1530,9 +1538,123 @@ class Pet(QWidget):
             self.config_dialog.activateWindow()
 
     def exit_app(self):
+        try:
+            self.save_state("退出")
+        except Exception as e:
+            log(f"保存退出状态失败：{e}", "ERR")
         close_all_audio()
         self.tray_icon.hide()
         os._exit(0)
+
+    # ---------- 状态记录 ----------
+    def snapshot_state(self):
+        """把当前模型和运动状态抓成一份可序列化的快照。"""
+        return {
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "app_version": APP_VERSION,
+            "model_path": model_path,
+            "model_name": Path(model_path).name if model_path else "",
+            "custom_texture": data.get("custom_texture", ""),
+            "screen": [W, H],
+            # 全部可调参数
+            "params": dict(cfg),
+            # 运动状态
+            "motion": {
+                "cx": float(self.cx),
+                "cy": float(self.cy),
+                "vx": float(self.vx),
+                "vy": float(self.vy),
+                "wx": float(self.wx),
+                "wy": float(self.wy),
+                "wz": float(self.wz),
+                "speed": float((self.vx ** 2 + self.vy ** 2) ** 0.5),
+                "spin": float((self.wx ** 2 + self.wy ** 2 + self.wz ** 2) ** 0.5),
+                "rot": [[float(x) for x in row] for row in self.rot_mat],
+            },
+            "geometry": {
+                "vertices": int(len(verts)),
+                "triangles": int(len(verts) // 3),
+                "inertia_z": float(Iz),
+            },
+        }
+
+    def save_state(self, reason="自动", quiet=False):
+        snap = self.snapshot_state()
+        STATE_PATH.write_text(json.dumps(snap, indent=2, ensure_ascii=False), encoding="utf-8")
+        if quiet:
+            return snap
+        m = snap["motion"]
+        log(f"状态已记录（{reason}）：{snap['model_name']}  "
+            f"位置=({m['cx']:.0f}, {m['cy']:.0f})  "
+            f"速度={m['speed']:.0f} px/s  角速度={m['spin']:.1f} rad/s  "
+            f"→ {STATE_PATH.name}")
+        p = snap["params"]
+        log("  参数：重力={:.0f} 弹性={:.2f} 摩擦={:.2f} 空气阻力={:.3f} "
+            "甩出力={:.0f} 最大速度={:.0f} 缩放={:.2f} 高度比={:.2f} 环境光={:.2f} 伽马={:.2f}".format(
+                float(p.get("gravity", 0)), float(p.get("restitution", 0)),
+                float(p.get("friction", 0)), float(p.get("air_drag", 0)),
+                float(p.get("throw_multiplier", 0)), float(p.get("max_speed", 0)),
+                float(p.get("model_scale", 0)), float(p.get("target_height_ratio", 0)),
+                float(p.get("ambient_light", 0)), float(p.get("gamma", 0))))
+        log("  角速度分量：wx={:.2f} wy={:.2f} wz={:.2f}".format(
+            m["wx"], m["wy"], m["wz"]))
+        return snap
+
+    def restore_state(self):
+        """程序启动时把上次的位置/朝向/速度还原；模型变了就不还原运动，只提示。"""
+        if not STATE_PATH.exists():
+            log("没有上次的状态记录，从屏幕中央开始")
+            return False
+        try:
+            snap = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        except Exception as e:
+            log(f"状态文件读不出来（忽略）：{e}", "WARN")
+            return False
+
+        saved_model = snap.get("model_path", "")
+        motion = snap.get("motion") or {}
+        if not motion:
+            return False
+
+        if saved_model and Path(saved_model) != Path(model_path):
+            log(f"上次的模型是 {Path(saved_model).name}，现在换成了 "
+                f"{Path(model_path).name} —— 跳过运动状态还原")
+            return False
+
+        # 屏幕分辨率变了的话，按比例把位置搬过来，别让桌宠跑到屏幕外
+        saved_screen = snap.get("screen") or [W, H]
+        sx, sy = W / float(saved_screen[0] or W), H / float(saved_screen[1] or H)
+
+        self.cx = float(motion.get("cx", W / 2)) * sx
+        self.cy = float(motion.get("cy", H / 2)) * sy
+        self.vx = float(motion.get("vx", 0.0))
+        self.vy = float(motion.get("vy", 0.0))
+        self.wx = float(motion.get("wx", 0.0))
+        self.wy = float(motion.get("wy", 0.0))
+        self.wz = float(motion.get("wz", 0.0))
+        rot = motion.get("rot")
+        if rot:
+            try:
+                arr = np.array(rot, dtype='f4')
+                if arr.shape == (3, 3):
+                    self.rot_mat = arr
+            except Exception:
+                pass
+
+        # 速度太离谱就归零，免得一启动就飞出屏幕
+        speed = (self.vx ** 2 + self.vy ** 2) ** 0.5
+        if speed > 3000.0:
+            log(f"上次结束时的速度太大（{speed:.0f} px/s），已归零")
+            self.vx = self.vy = 0.0
+        spin = (self.wx ** 2 + self.wy ** 2 + self.wz ** 2) ** 0.5
+        if spin > 6.0:
+            log(f"上次结束时的角速度太大（{spin:.1f} rad/s），已归零")
+            self.wx = self.wy = self.wz = 0.0
+
+        log(f"已恢复上次状态（{snap.get('saved_at', '?')}）："
+            f"位置=({self.cx:.0f}, {self.cy:.0f})  "
+            f"速度={speed:.0f} px/s  角速度={spin:.1f} rad/s")
+        return True
 
     def apply_config(self):
         global verts, normals, tex_uv, Iz, tex
@@ -1627,6 +1749,7 @@ class Pet(QWidget):
             
         self._last_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
         log(f"新模型已生效：{len(verts)} 个顶点（{len(verts)//3} 个三角面）")
+        self.save_state("换模型")
         
         self.cx, self.cy = float(W/2), float(H/2)
         self.vx = self.vy = 0.0
