@@ -1,4 +1,4 @@
-﻿import sys, json, ctypes, os, time, zipfile, hashlib, shutil, threading, traceback
+﻿import sys, json, ctypes, os, time, zipfile, hashlib, shutil, threading, traceback, math
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -27,7 +27,7 @@ LOG_PATH = APPDATA_DIR / "console.log"
 STATE_PATH = APPDATA_DIR / "state.json"
 
 APP_NAME = "Fumofumo"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 
 # ================= 日志 =================
 # 打包成 exe 后没有控制台窗口，print / traceback 全都看不见。
@@ -430,7 +430,8 @@ DEFAULT_CONFIG = {
     "gravity": 2500.0, "restitution": 0.3, "friction": 0.8,
     "air_drag": 0.985, "throw_multiplier": 60.0, "max_speed": 5000.0,
     "model_scale": 1.0, "target_height_ratio": 0.2,
-    "flip_texture": True, "ambient_light": 0.65, "gamma": 1.2, "audio_volume": 650
+    "flip_texture": True, "ambient_light": 0.65, "gamma": 1.2, "audio_volume": 650,
+    "restore_state_on_start": True
 }
 
 CONFIG_META = {
@@ -443,6 +444,7 @@ CONFIG_META = {
     "model_scale": {"name": "模型缩放倍数", "min": 0.1, "max": 5.0, "step": 1, "type": "float", "scale": 100},
     "target_height_ratio": {"name": "模型高度比例", "min": 0.1, "max": 1.0, "step": 1, "type": "float", "scale": 100},
     "flip_texture": {"name": "纹理扭曲修正", "type": "bool"},
+    "restore_state_on_start": {"name": "启动时恢复上次状态", "type": "bool"},
     "ambient_light": {"name": "自发光/环境光", "min": 0, "max": 1, "step": 1, "type": "float", "scale": 100},
     "gamma": {"name": "伽马校正", "min": 0.5, "max": 3.0, "step": 1, "type": "float", "scale": 100},
     "audio_volume": {"name": "音频音量", "min": 0, "max": 1000, "step": 10, "type": "float"}
@@ -1491,7 +1493,10 @@ class Pet(QWidget):
         self._last_geom_cfg = (cfg["model_scale"], cfg["target_height_ratio"], cfg["flip_texture"])
         
         self.setup_tray()
-        self.restore_state()
+        if cfg.get("restore_state_on_start", True):
+            self.restore_state()
+        else:
+            log("配置里关闭了「启动时恢复上次状态」，从屏幕中央重新开始")
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
@@ -1547,8 +1552,27 @@ class Pet(QWidget):
         os._exit(0)
 
     # ---------- 状态记录 ----------
+    @staticmethod
+    def rot_to_euler_deg(rot):
+        """3×3 旋转矩阵 → XYZ 欧拉角（度）。只是为了让人能读懂 state.json。"""
+        try:
+            m = [[float(rot[r][c]) for c in range(3)] for r in range(3)]
+            sy = math.sqrt(m[0][0] ** 2 + m[1][0] ** 2)
+            if sy > 1e-6:
+                x = math.atan2(m[2][1], m[2][2])
+                y = math.atan2(-m[2][0], sy)
+                z = math.atan2(m[1][0], m[0][0])
+            else:                      # 万向锁
+                x = math.atan2(-m[1][2], m[1][1])
+                y = math.atan2(-m[2][0], sy)
+                z = 0.0
+            return [round(math.degrees(v), 2) for v in (x, y, z)]
+        except Exception:
+            return [0.0, 0.0, 0.0]
+
     def snapshot_state(self):
         """把当前模型和运动状态抓成一份可序列化的快照。"""
+        rot = [[float(x) for x in row] for row in self.rot_mat]
         return {
             "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "app_version": APP_VERSION,
@@ -1569,7 +1593,9 @@ class Pet(QWidget):
                 "wz": float(self.wz),
                 "speed": float((self.vx ** 2 + self.vy ** 2) ** 0.5),
                 "spin": float((self.wx ** 2 + self.wy ** 2 + self.wz ** 2) ** 0.5),
-                "rot": [[float(x) for x in row] for row in self.rot_mat],
+                # 旋转：矩阵是精确还原用的，euler 是给人看的
+                "rot": rot,
+                "euler_deg": self.rot_to_euler_deg(rot),
             },
             "geometry": {
                 "vertices": int(len(verts)),
@@ -1598,6 +1624,8 @@ class Pet(QWidget):
                 float(p.get("ambient_light", 0)), float(p.get("gamma", 0))))
         log("  角速度分量：wx={:.2f} wy={:.2f} wz={:.2f}".format(
             m["wx"], m["wy"], m["wz"]))
+        e = m.get("euler_deg") or [0, 0, 0]
+        log("  朝向（欧拉角）：俯仰={:.1f}° 偏航={:.1f}° 翻滚={:.1f}°".format(e[0], e[1], e[2]))
         return snap
 
     def restore_state(self):

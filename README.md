@@ -96,7 +96,7 @@
 | --- | --- |
 | 模型 | `model_path`、`model_name`、`custom_texture` |
 | 全部参数 | `gravity`、`restitution`、`friction`、`air_drag`、`throw_multiplier`、`max_speed`、`model_scale`、`target_height_ratio`、`flip_texture`、`ambient_light`、`gamma`、`audio_volume` |
-| 运动状态 | `cx`/`cy`（位置）、`vx`/`vy`（线速度）、`wx`/`wy`/`wz`（角速度）、`speed`、`spin`、`rot`（3×3 旋转矩阵） |
+| 运动状态 | `cx`/`cy`（位置）、`vx`/`vy`（线速度）、`wx`/`wy`/`wz`（角速度）、`speed`、`spin`、`rot`（3×3 旋转矩阵）、`euler_deg`（俯仰/偏航/翻滚，度数） |
 | 几何 | `vertices`、`triangles`、`inertia_z` |
 | 环境 | `screen`（分辨率）、`saved_at`、`app_version` |
 
@@ -109,23 +109,27 @@
     "vx": -32.40, "vy": -2.59,
     "wx": -0.59, "wy": 0.19, "wz": 0.31,
     "speed": 32.5, "spin": 0.70,
-    "rot": [[0.333, 0.869, -0.366], ...]
+    "rot": [[0.333, 0.869, -0.366], [0.914, -0.202, 0.352], [0.232, -0.452, -0.861]],
+    "euler_deg": [-153.3, -13.4, 69.8]
   },
   "geometry": {"vertices": 29997, "triangles": 9999, "inertia_z": 6868.98}
 }
 ```
 
+旋转存两种：`rot` 是精确还原用的 3×3 矩阵，`euler_deg` 是给人读的角度。控制台里也会打印一行：`朝向（欧拉角）：俯仰=-153.3° 偏航=-13.4° 翻滚=69.8°`。
+
 几个细节：
 
-- **每 10 秒自动记录一次**，所以即使程序被强杀也不会丢掉大致位置；正常退出时再记一次（控制台里会打印位置、速度、角速度和全部参数）
+- **每 10 秒自动记录一次**，所以即使程序被强杀也不会丢掉大致位置；正常退出时再记一次（控制台里会打印位置、速度、角速度、朝向和全部参数）
 - **换模型时也会记一次**
 - 启动还原时如果**模型和上次不一样**，只加载新模型、不套用旧的运动状态
 - 速度超过 3000 px/s 或角速度超过 6 rad/s 会被**归零**，免得一启动就飞出屏幕
 - **屏幕分辨率变了**会按比例把位置换算过去
+- 配置面板里有 **「启动时恢复上次状态」** 开关，关掉之后每次启动都从屏幕正中重新开始（状态照样会记录，只是不套用）
 
 ## 下载与使用
 
-1. 在仓库右侧的 **Releases** 页面下载最新的 `Fumofumo-1.3.0-win64.zip`。
+1. 在仓库右侧的 **Releases** 页面下载最新的 `Fumofumo-1.4.0-win64.zip`。
 2. 解压到任意文件夹（**整个文件夹一起**，不要只拿 exe 出去，它依赖同目录的 `_internal\`）。
 3. 双击 `Fumofumo.exe`，首次启动会提示选择模型文件。
 4. 程序无需安装 Python 环境。
@@ -152,7 +156,7 @@ python Fumofumo.py
 | --- | --- | --- |
 | `dist\Fumofumo\Fumofumo.exe` | 6 MB | 主程序（依赖同目录 `_internal\`） |
 | `dist\Fumofumo\` | 163 MB / 362 文件 | 整个文件夹，可直接运行 |
-| `dist\Fumofumo-1.3.0-win64.zip` | **62 MB** | 发版用的压缩包 |
+| `dist\Fumofumo-1.4.0-win64.zip` | **62 MB** | 发版用的压缩包 |
 
 脚本里的关键参数，以及为什么这么选：
 
